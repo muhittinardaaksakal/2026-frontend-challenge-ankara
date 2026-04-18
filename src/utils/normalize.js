@@ -75,24 +75,29 @@ const SUSPICIOUS_KEYWORDS = [
 
 const NAME_STOPWORDS = new Set([
   'surekli',
-  'sürekli',
+  'eger',
   'yan',
   'yanindaki',
-  'yanındaki',
   'yakininda',
-  'yakınında',
   'buradaki',
   'herkes',
   'kalabalik',
-  'kalabalık',
   'burasi',
   'orasi',
   'aslinda',
-  'aslında',
   'galiba',
   'biraz',
   'sonra',
   'sadece',
+  'simdi',
+  'orada',
+  'burada',
+  'mesele',
+  'baska',
+  'bunun',
+  'sunun',
+  'oyle',
+  'boyle',
   'messages',
   'checkins',
   'sightings',
@@ -102,6 +107,10 @@ const NAME_STOPWORDS = new Set([
   'tips',
   'submit',
 ]);
+
+const KNOWN_PLACE_DISPLAY = {
+  cermodern: 'CerModern',
+};
 
 function transliterateTurkish(value) {
   return String(value || '')
@@ -291,6 +300,34 @@ function chooseBetterDisplayName(currentValue, nextValue) {
   return nextValue.localeCompare(currentValue, 'tr', { sensitivity: 'base' }) < 0 ? nextValue : currentValue;
 }
 
+function chooseBetterPlaceDisplay(currentValue, nextValue, key) {
+  const knownValue = KNOWN_PLACE_DISPLAY[key];
+
+  if (knownValue) {
+    return knownValue;
+  }
+
+  if (!currentValue) {
+    return nextValue;
+  }
+
+  const currentHasMixedCase = /[a-z][A-Z]/.test(currentValue);
+  const nextHasMixedCase = /[a-z][A-Z]/.test(nextValue);
+
+  if (currentHasMixedCase !== nextHasMixedCase) {
+    return nextHasMixedCase ? nextValue : currentValue;
+  }
+
+  const currentAscii = transliterateTurkish(currentValue);
+  const nextAscii = transliterateTurkish(nextValue);
+
+  if (currentAscii.toLowerCase() === nextAscii.toLowerCase()) {
+    return currentValue.length >= nextValue.length ? currentValue : nextValue;
+  }
+
+  return nextValue.length > currentValue.length ? nextValue : currentValue;
+}
+
 function normalizePersonCandidate(value) {
   const cleaned = normalizeWhitespace(value)
     .replace(/[;,]+$/g, '')
@@ -330,17 +367,7 @@ function createCanonicalPersonKey(value) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (!normalized) {
-    return '';
-  }
-
-  const tokens = normalized.split(' ').filter(Boolean);
-
-  if (tokens.length >= 2 && tokens[tokens.length - 1].length === 1) {
-    tokens.pop();
-  }
-
-  return tokens.join(' ');
+  return normalized;
 }
 
 function createCanonicalPlaceKey(value) {
@@ -453,9 +480,8 @@ function buildPlaceEntities(fields, content) {
       return;
     }
 
-    if (!byKey.has(key)) {
-      byKey.set(key, place);
-    }
+    const currentDisplay = byKey.get(key);
+    byKey.set(key, chooseBetterPlaceDisplay(currentDisplay, place, key));
   });
 
   return [...byKey.entries()].map(([key, display]) => ({
@@ -497,22 +523,10 @@ export function normalizeSubmission(source, submission) {
   const placeEntities = buildPlaceEntities(fields, content);
   const primaryPersonKey = createCanonicalPersonKey(primaryPersonDisplay);
   const primaryPlaceKey = createCanonicalPlaceKey(primaryPlaceDisplay);
-  const person =
-    primaryPersonDisplay ||
-    personEntities[0]?.display ||
-    '';
-  const personKey =
-    primaryPersonKey ||
-    personEntities[0]?.key ||
-    '';
-  const place =
-    primaryPlaceDisplay ||
-    placeEntities[0]?.display ||
-    '';
-  const placeKey =
-    primaryPlaceKey ||
-    placeEntities[0]?.key ||
-    '';
+  const person = primaryPersonDisplay || '';
+  const personKey = primaryPersonKey || '';
+  const place = primaryPlaceDisplay || placeEntities[0]?.display || '';
+  const placeKey = primaryPlaceKey || placeEntities[0]?.key || '';
   const relatedPeople = personEntities.map((item) => item.display);
   const relatedPersonKeys = personEntities.map((item) => item.key);
   const relatedPlaces = placeEntities.map((item) => item.display);
@@ -529,6 +543,7 @@ export function normalizeSubmission(source, submission) {
   ]
     .join(' ')
     .toLowerCase();
+  const title = person || place || source.label;
 
   return {
     id: `${source.key}-${submission?.id || submission?.submission_id || crypto.randomUUID()}`,
@@ -543,6 +558,7 @@ export function normalizeSubmission(source, submission) {
     fields,
     fieldsByLabel: parsedAnswers.byLabel,
     fieldsByName: parsedAnswers.byName,
+    title,
     person,
     personKey,
     place,

@@ -533,6 +533,22 @@ select {
   margin: 0;
 }
 
+.trail-toggle {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid #dcc6a9;
+  border-radius: 999px;
+  background: #f7ecdc;
+  color: #5f4630;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.trail-toggle:hover {
+  border-color: #c38a6b;
+  background: #f4e3cf;
+}
+
 .state-view,
 .list-empty {
   display: grid;

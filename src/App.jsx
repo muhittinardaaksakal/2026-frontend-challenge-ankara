@@ -34,7 +34,8 @@ export default function App() {
   const [selectedRecordId, setSelectedRecordId] = useState('');
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
-  const [focusFilter, setFocusFilter] = useState('all');
+  const [personFilter, setPersonFilter] = useState('all');
+  const [placeFilter, setPlaceFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -79,9 +80,10 @@ export default function App() {
     return filterInvestigationRecords(data.records, {
       query,
       source: sourceFilter,
-      focus: focusFilter,
+      person: personFilter,
+      place: placeFilter,
     });
-  }, [data.records, query, sourceFilter, focusFilter]);
+  }, [data.records, query, sourceFilter, personFilter, placeFilter]);
 
   useEffect(() => {
     if (filteredRecords.length === 0) {
@@ -119,19 +121,19 @@ export default function App() {
     });
   }, [data.records]);
 
-  const focusOptions = useMemo(() => {
-    const values = [
+  const personOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'All people' },
       ...data.people.slice(0, 12).map((item) => ({ value: item.key, label: item.value })),
+    ];
+  }, [data.people]);
+
+  const placeOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'All places' },
       ...data.places.slice(0, 12).map((item) => ({ value: item.key, label: item.value })),
     ];
-
-    return [
-      { value: 'all', label: 'All people and places' },
-      ...values.filter((item, index, collection) => {
-        return collection.findIndex((candidate) => candidate.value === item.value) === index;
-      }),
-    ];
-  }, [data.people, data.places]);
+  }, [data.places]);
 
   const hasRecords = filteredRecords.length > 0;
   const resultLabel = `${filteredRecords.length} lead${filteredRecords.length === 1 ? '' : 's'}`;
@@ -166,12 +168,24 @@ export default function App() {
               value={sourceFilter}
               onChange={setSourceFilter}
               options={sourceOptions}
+              inputId="source-filter"
+              inputName="sourceFilter"
             />
             <FilterBar
-              label="Person or place"
-              value={focusFilter}
-              onChange={setFocusFilter}
-              options={focusOptions}
+              label="Person"
+              value={personFilter}
+              onChange={setPersonFilter}
+              options={personOptions}
+              inputId="person-filter"
+              inputName="personFilter"
+            />
+            <FilterBar
+              label="Place"
+              value={placeFilter}
+              onChange={setPlaceFilter}
+              options={placeOptions}
+              inputId="place-filter"
+              inputName="placeFilter"
             />
           </div>
 
@@ -236,7 +250,7 @@ export default function App() {
           ) : (
             <StateView
               title="No leads found"
-              message="Try a different search term or widen the source and person/place filters."
+              message="Try a different search term or widen the source, person, or place filters."
               tone="empty"
             />
           )}

@@ -119,14 +119,16 @@ export function filterInvestigationRecords(records, filters) {
       record.searchText.includes(normalizedQuery) ||
       record.id.toLowerCase().includes(normalizedQuery);
     const matchesSource = filters.source === 'all' || record.source === filters.source;
-    const matchesFocus =
-      filters.focus === 'all' ||
-      record.personKey === filters.focus ||
-      record.placeKey === filters.focus ||
-      record.relatedPersonKeys.includes(filters.focus) ||
-      record.relatedPlaceKeys.includes(filters.focus);
+    const matchesPerson =
+      filters.person === 'all' ||
+      record.personKey === filters.person ||
+      record.relatedPersonKeys.includes(filters.person);
+    const matchesPlace =
+      filters.place === 'all' ||
+      record.placeKey === filters.place ||
+      record.relatedPlaceKeys.includes(filters.place);
 
-    return matchesQuery && matchesSource && matchesFocus;
+    return matchesQuery && matchesSource && matchesPerson && matchesPlace;
   });
 }
 

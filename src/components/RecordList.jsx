@@ -22,7 +22,7 @@ export default function RecordList({ records, selectedRecordId, onSelect }) {
             onClick={() => onSelect(record.id)}
           >
             <div className="record-list-item-top">
-              <h2>{record.person || record.place || record.sourceLabel}</h2>
+              <h2>{record.title || record.person || record.place || record.sourceLabel}</h2>
               <span className={`source-badge source-${record.source}`}>{record.sourceLabel}</span>
             </div>
             <p className="record-id">{record.submissionId || record.id}</p>
