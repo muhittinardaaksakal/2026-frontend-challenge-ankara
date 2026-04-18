@@ -11,6 +11,7 @@ Missing Podo is a React + Vite investigation dashboard built for the Jotform fro
 - investigation-focused master/detail workflow
 - source, person, place, and text filtering
 - linked record exploration across sources
+- clickable summary insights for suspicious leads, repeated places, and Podo-linked activity
 - compact Podo Trail panel for the last seen chain
 - loading, error, empty, and safe fallback states
 

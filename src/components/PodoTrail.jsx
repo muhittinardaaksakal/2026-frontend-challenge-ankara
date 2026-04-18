@@ -8,7 +8,7 @@ function formatTrailLine(record) {
     .join(' | ');
 }
 
-export default function PodoTrail({ records }) {
+export default function PodoTrail({ records, onSelectRecord }) {
   const [expanded, setExpanded] = useState(false);
 
   const visibleRecords = useMemo(() => {
@@ -32,7 +32,12 @@ export default function PodoTrail({ records }) {
 
       <ol className="trail-list">
         {visibleRecords.map((record) => (
-          <li key={record.id} className="trail-item">
+          <li key={record.id}>
+            <button
+              type="button"
+              className={`trail-item ${onSelectRecord ? 'trail-item-button' : ''}`}
+              onClick={() => onSelectRecord?.(record)}
+            >
             <div className="trail-time">
               <strong>{record.createdAt || 'Unknown time'}</strong>
               <span>{record.sourceLabel}</span>
@@ -41,6 +46,7 @@ export default function PodoTrail({ records }) {
               <strong>{formatTrailLine(record)}</strong>
               <p>{record.summary}</p>
             </div>
+            </button>
           </li>
         ))}
       </ol>

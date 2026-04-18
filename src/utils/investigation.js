@@ -41,6 +41,32 @@ function getTopEntity(entities) {
   return entities[0]?.value || '';
 }
 
+function getRecordPersonEntries(record) {
+  const entries = [];
+
+  if (record.personKey && record.person) {
+    entries.push({
+      key: record.personKey,
+      value: record.person,
+    });
+  }
+
+  record.relatedPersonKeys.forEach((key, index) => {
+    const value = record.relatedPeople[index];
+
+    if (!key || !value) {
+      return;
+    }
+
+    entries.push({ key, value });
+  });
+
+  return uniqueStrings(entries.map((entry) => `${entry.key}:::${entry.value}`)).map((entry) => {
+    const [key, value] = entry.split(':::');
+    return { key, value };
+  });
+}
+
 function includesPodo(record) {
   const haystack = [record.person, record.content, record.summary, ...record.relatedPeople]
     .join(' ')
@@ -58,6 +84,116 @@ function buildPodoTrail(records) {
       return left.sortAt - right.sortAt;
     })
     .slice(-8);
+}
+
+function pickLastSeenWithPodo(trailRecords) {
+  const latestRecord = [...trailRecords].reverse().find((record) => {
+    return getRecordPersonEntries(record).some((entry) => entry.key !== 'podo');
+  });
+
+  if (!latestRecord) {
+    return null;
+  }
+
+  const companion = getRecordPersonEntries(latestRecord).find((entry) => entry.key !== 'podo');
+
+  if (!companion) {
+    return null;
+  }
+
+  return {
+    personKey: companion.key,
+    person: companion.value,
+    placeKey: latestRecord.placeKey,
+    place: latestRecord.place,
+    recordId: latestRecord.id,
+    source: latestRecord.source,
+    createdAt: latestRecord.createdAt,
+    summary: latestRecord.summary,
+  };
+}
+
+function parseConfidenceValue(value) {
+  const normalizedValue = String(value || '').trim().toLowerCase();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (normalizedValue.includes('high')) {
+    return { score: 3, label: 'High confidence' };
+  }
+
+  if (normalizedValue.includes('medium')) {
+    return { score: 2, label: 'Medium confidence' };
+  }
+
+  if (normalizedValue.includes('low')) {
+    return { score: 1, label: 'Low confidence' };
+  }
+
+  const percentMatch = normalizedValue.match(/(\d{1,3})\s*%/);
+
+  if (percentMatch) {
+    const percentage = Number(percentMatch[1]);
+
+    if (Number.isFinite(percentage)) {
+      return {
+        score: percentage,
+        label: `${percentage}% confidence`,
+      };
+    }
+  }
+
+  const numberMatch = normalizedValue.match(/\b([1-9]|10)\b/);
+
+  if (numberMatch) {
+    const number = Number(numberMatch[1]);
+
+    return {
+      score: number,
+      label: `${number}/10 confidence`,
+    };
+  }
+
+  return null;
+}
+
+function pickHighestConfidenceTip(records) {
+  const tipRecords = records.filter((record) => record.source === 'tips');
+
+  const scoredTips = tipRecords
+    .map((record) => {
+      const confidenceField = record.fields.find((field) => {
+        const label = field.label.toLowerCase();
+        const name = field.name.toLowerCase();
+
+        return (
+          label.includes('confidence') ||
+          label.includes('reliability') ||
+          name.includes('confidence') ||
+          name.includes('reliability')
+        );
+      });
+
+      const confidence = parseConfidenceValue(confidenceField?.value);
+
+      if (!confidence) {
+        return null;
+      }
+
+      return {
+        ...record,
+        confidenceLabel: confidence.label,
+        confidenceScore: confidence.score,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      return right.confidenceScore - left.confidenceScore || right.sortAt - left.sortAt;
+    });
+
+  return scoredTips[0] || null;
 }
 
 export function buildInvestigationModel(sourceResponses) {
@@ -92,6 +228,9 @@ export function buildInvestigationModel(sourceResponses) {
 
   const suspiciousLead = [...records].sort((left, right) => right.suspicionScore - left.suspicionScore)[0] || null;
   const latestSighting = records.find((record) => record.source === 'sightings') || null;
+  const podoTrail = buildPodoTrail(records);
+  const lastSeenWithPodo = pickLastSeenWithPodo(podoTrail);
+  const highestConfidenceTip = pickHighestConfidenceTip(records);
 
   return {
     records,
@@ -105,7 +244,9 @@ export function buildInvestigationModel(sourceResponses) {
       topPlace: getTopEntity(places),
       suspiciousLead,
       latestSighting,
-      podoTrail: buildPodoTrail(records),
+      podoTrail,
+      lastSeenWithPodo,
+      highestConfidenceTip,
     },
   };
 }

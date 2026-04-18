@@ -26,6 +26,8 @@ const INITIAL_STATE = {
     suspiciousLead: null,
     latestSighting: null,
     podoTrail: [],
+    lastSeenWithPodo: null,
+    highestConfidenceTip: null,
   },
 };
 
@@ -106,6 +108,61 @@ export default function App() {
     return getLinkedRecords(selectedRecord, data.records);
   }, [selectedRecord, data.records]);
 
+  function focusRecord(record, options = {}) {
+    if (!record) {
+      return;
+    }
+
+    setQuery('');
+    setSourceFilter(options.source ?? 'all');
+    setPersonFilter(options.person ?? 'all');
+    setPlaceFilter(options.place ?? 'all');
+    setSelectedRecordId(record.id);
+  }
+
+  function handleInsightFocus(insightKey) {
+    if (insightKey === 'podo' && data.summary.lastSeenWithPodo) {
+      const focusRecordItem = data.records.find((record) => record.id === data.summary.lastSeenWithPodo.recordId);
+
+      focusRecord(focusRecordItem, {
+        person: data.summary.lastSeenWithPodo.personKey || 'all',
+        place: data.summary.lastSeenWithPodo.placeKey || 'all',
+      });
+      return;
+    }
+
+    if (insightKey === 'lead' && data.summary.suspiciousLead) {
+      focusRecord(data.summary.suspiciousLead, {
+        source: data.summary.suspiciousLead.source,
+      });
+      return;
+    }
+
+    if (insightKey === 'place' && data.summary.topPlace) {
+      const topPlaceOption = data.places.find((item) => item.value === data.summary.topPlace);
+
+      setQuery('');
+      setSourceFilter('all');
+      setPersonFilter('all');
+      setPlaceFilter(topPlaceOption?.key || 'all');
+      return;
+    }
+
+    if (insightKey === 'tip' && data.summary.highestConfidenceTip) {
+      focusRecord(data.summary.highestConfidenceTip, {
+        source: 'tips',
+      });
+    }
+  }
+
+  function handleTrailSelect(record) {
+    focusRecord(record, {
+      source: 'all',
+      person: record.personKey || 'all',
+      place: record.placeKey || 'all',
+    });
+  }
+
   const sourceOptions = useMemo(() => {
     const configuredOptions = [
       { value: 'all', label: 'All sources' },
@@ -157,7 +214,9 @@ export default function App() {
         </p>
       </header>
 
-      {!loading && !error && data.records.length > 0 ? <SummaryBar summary={data.summary} /> : null}
+      {!loading && !error && data.records.length > 0 ? (
+        <SummaryBar summary={data.summary} onFocusInsight={handleInsightFocus} />
+      ) : null}
 
       <main className="app-layout">
         <section className="panel sidebar-panel">
@@ -240,7 +299,7 @@ export default function App() {
             />
           ) : hasRecords && selectedRecord ? (
             <>
-              <PodoTrail records={data.summary.podoTrail} />
+              <PodoTrail records={data.summary.podoTrail} onSelectRecord={handleTrailSelect} />
               <DetailPanel
                 record={selectedRecord}
                 linkedRecords={linkedRecords}
