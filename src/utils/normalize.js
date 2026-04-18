@@ -40,7 +40,6 @@ const PLACE_HINTS = [
   'checkpoint',
   'check-in',
   'checkin',
-  'coordinates',
 ];
 
 const CONTENT_HINTS = [
@@ -116,18 +115,10 @@ const KNOWN_PLACE_DISPLAY = {
 
 function transliterateTurkish(value) {
   return String(value || '')
-    .replace(/ç/g, 'c')
-    .replace(/Ç/g, 'C')
-    .replace(/ğ/g, 'g')
-    .replace(/Ğ/g, 'G')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/ı/g, 'i')
-    .replace(/İ/g, 'I')
-    .replace(/ö/g, 'o')
-    .replace(/Ö/g, 'O')
-    .replace(/ş/g, 's')
-    .replace(/Ş/g, 'S')
-    .replace(/ü/g, 'u')
-    .replace(/Ü/g, 'U');
+    .replace(/İ/g, 'I');
 }
 
 function slugify(value) {
@@ -290,13 +281,19 @@ function chooseBetterDisplayName(currentValue, nextValue) {
 
   const currentHasInitial = /\b[A-Z]\.?$/u.test(currentValue);
   const nextHasInitial = /\b[A-Z]\.?$/u.test(nextValue);
+  const currentHasTurkish = /[ÇĞİÖŞÜçğıöşü]/u.test(currentValue);
+  const nextHasTurkish = /[ÇĞİÖŞÜçğıöşü]/u.test(nextValue);
 
   if (currentHasInitial !== nextHasInitial) {
-    return currentHasInitial ? currentValue : nextValue;
+    return currentHasInitial ? nextValue : currentValue;
+  }
+
+  if (currentHasTurkish !== nextHasTurkish) {
+    return nextHasTurkish ? nextValue : currentValue;
   }
 
   if (nextValue.length !== currentValue.length) {
-    return nextValue.length > currentValue.length ? nextValue : currentValue;
+    return nextValue.length < currentValue.length ? nextValue : currentValue;
   }
 
   return nextValue.localeCompare(currentValue, 'tr', { sensitivity: 'base' }) < 0 ? nextValue : currentValue;
@@ -361,6 +358,10 @@ function normalizePersonCandidate(value) {
   }
 
   return /[A-Za-zÇĞİÖŞÜçğıöşü]/u.test(stripped) ? stripped : '';
+}
+
+function isCoordinateLike(value) {
+  return /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(String(value || '').trim());
 }
 
 function createCanonicalPersonKey(value) {
@@ -463,6 +464,10 @@ function buildPlaceEntities(fields, content) {
   const byKey = new Map();
 
   selectedPlaces.forEach((place) => {
+    if (isCoordinateLike(place)) {
+      return;
+    }
+
     const key = createCanonicalPlaceKey(place);
 
     if (!key) {
@@ -534,9 +539,10 @@ export function normalizeSubmission(source, submission) {
     submission?.updatedAt ||
     '';
 
-  const primaryPlaceDisplay =
+  const rawPrimaryPlaceDisplay =
     findFirstMatch(parsedAnswers.byLabel, PLACE_HINTS) ||
     findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
+  const primaryPlaceDisplay = isCoordinateLike(rawPrimaryPlaceDisplay) ? '' : rawPrimaryPlaceDisplay;
   const content = buildContent(fields, parsedAnswers);
   const placeEntities = buildPlaceEntities(fields, content);
   const blockedPlaceKeys = new Set([
@@ -553,7 +559,8 @@ export function normalizeSubmission(source, submission) {
   const primaryPlaceKey = createCanonicalPlaceKey(primaryPlaceDisplay);
   const safePrimaryPerson =
     primaryPersonKey && !blockedPlaceKeys.has(primaryPersonKey) ? primaryPersonDisplay : '';
-  const person = safePrimaryPerson || '';
+  const primaryPersonEntity = personEntities.find((item) => item.key === primaryPersonKey);
+  const person = primaryPersonEntity?.display || safePrimaryPerson || '';
   const personKey = safePrimaryPerson ? primaryPersonKey : '';
   const place = primaryPlaceDisplay || placeEntities[0]?.display || '';
   const placeKey = primaryPlaceKey || placeEntities[0]?.key || '';
