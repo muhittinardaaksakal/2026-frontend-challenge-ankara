@@ -41,6 +41,16 @@ const PLACE_HINTS = [
   'checkin',
 ];
 
+const COORDINATE_HINTS = [
+  'coordinates',
+  'coordinate',
+  'coords',
+  'latitude',
+  'longitude',
+  'lat',
+  'lng',
+];
+
 const CONTENT_HINTS = [
   'message',
   'note',
@@ -467,6 +477,34 @@ function isCoordinateLike(value) {
   return /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(String(value || '').trim());
 }
 
+function parseCoordinates(value) {
+  const match = String(value || '')
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const latitude = Number(match[1]);
+  const longitude = Number(match[2]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return null;
+  }
+
+  return {
+    lat: latitude,
+    lng: longitude,
+    label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+  };
+}
+
 function createCanonicalPersonKey(value) {
   const normalized = slugify(value)
     .replace(/[^a-z0-9 ]+/g, ' ')
@@ -587,6 +625,15 @@ function buildPlaceEntities(fields, content) {
   }));
 }
 
+function buildCoordinates(fields, lookups) {
+  const hintedCoordinateValue =
+    findPriorityMatch(lookups.byLabel, COORDINATE_HINTS) ||
+    findPriorityMatch(lookups.byName, COORDINATE_HINTS) ||
+    collectValuesByHints(fields, COORDINATE_HINTS).find((value) => parseCoordinates(value));
+
+  return parseCoordinates(hintedCoordinateValue);
+}
+
 function buildPersonEntities(fields, content, blockedPlaceKeys) {
   const hintedPeople = collectValuesByHints(fields, PERSON_HINTS).flatMap(splitPersonValues);
   const inferredPeople = hintedPeople.length > 0 ? [] : extractNamesFromText(content);
@@ -647,6 +694,7 @@ export function normalizeSubmission(source, submission) {
     findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
   const primaryPlaceDisplay = isCoordinateLike(rawPrimaryPlaceDisplay) ? '' : rawPrimaryPlaceDisplay;
   const content = buildContent(fields, parsedAnswers);
+  const coordinates = buildCoordinates(fields, parsedAnswers);
   const placeEntities = buildPlaceEntities(fields, content);
   const blockedPlaceKeys = new Set([
     createCanonicalPlaceKey(primaryPlaceDisplay),
@@ -710,6 +758,7 @@ export function normalizeSubmission(source, submission) {
     relatedPersonKeys,
     relatedPlaces,
     relatedPlaceKeys,
+    coordinates,
     suspicionScore,
     searchText: visibleSearchText,
     raw: submission,

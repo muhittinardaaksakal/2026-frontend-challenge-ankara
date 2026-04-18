@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getInvestigationSubmissions } from './api/jotform';
 import DetailPanel from './components/DetailPanel';
 import FilterBar from './components/FilterBar';
+import MapPanel from './components/MapPanel';
 import PodoTrail from './components/PodoTrail';
 import RecordList from './components/RecordList';
 import SearchBar from './components/SearchBar';
@@ -163,6 +164,14 @@ export default function App() {
     });
   }
 
+  function handleMapSelect(record) {
+    if (!record) {
+      return;
+    }
+
+    setSelectedRecordId(record.id);
+  }
+
   const sourceOptions = useMemo(() => {
     const configuredOptions = [
       { value: 'all', label: 'All sources' },
@@ -300,6 +309,11 @@ export default function App() {
           ) : hasRecords && selectedRecord ? (
             <>
               <PodoTrail records={data.summary.podoTrail} onSelectRecord={handleTrailSelect} />
+              <MapPanel
+                records={filteredRecords}
+                selectedRecordId={selectedRecordId}
+                onSelectRecord={handleMapSelect}
+              />
               <DetailPanel
                 record={selectedRecord}
                 linkedRecords={linkedRecords}

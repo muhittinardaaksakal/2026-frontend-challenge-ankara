@@ -553,6 +553,63 @@ select {
   color: var(--text-soft);
 }
 
+.map-panel {
+  margin-bottom: 18px;
+}
+
+.map-instruction {
+  color: var(--text-soft);
+}
+
+.map-shell {
+  margin-top: 14px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid #e2d5c0;
+}
+
+.map-canvas {
+  height: 340px;
+  width: 100%;
+}
+
+.map-popup {
+  display: grid;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.map-popup span,
+.map-popup-summary,
+.map-meta-row {
+  color: var(--text-soft);
+}
+
+.map-popup-summary {
+  margin: 6px 0 0;
+}
+
+.map-empty {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px dashed #dcc9ae;
+  background: #fff9f1;
+}
+
+.map-empty p {
+  margin: 8px 0 0;
+}
+
+.map-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 0.88rem;
+}
+
 .podo-trail-panel {
   margin-bottom: 18px;
 }
@@ -664,6 +721,10 @@ select {
   .trail-item {
     grid-template-columns: 1fr;
   }
+
+  .map-canvas {
+    height: 300px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -688,5 +749,9 @@ select {
 
   .page-header h1 {
     font-size: 2.25rem;
+  }
+
+  .map-canvas {
+    height: 260px;
   }
 }
