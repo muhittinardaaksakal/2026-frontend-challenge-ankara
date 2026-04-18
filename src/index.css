@@ -48,12 +48,12 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 32px;
-  margin-bottom: 28px;
+  gap: 28px;
+  margin-bottom: 24px;
 }
 
 .page-header h1 {
-  margin: 10px 0 10px;
+  margin: 10px 0;
   font-size: 3.2rem;
   line-height: 1.02;
   letter-spacing: -0.04em;
@@ -109,7 +109,7 @@ select {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .summary-card {
@@ -156,6 +156,7 @@ select {
   grid-template-columns: 380px 1fr;
   gap: 24px;
   align-items: start;
+  min-height: 0;
 }
 
 .panel {
@@ -166,33 +167,62 @@ select {
 }
 
 .sidebar-panel {
-  padding: 22px;
+  padding: 18px;
   position: sticky;
   top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
 }
 
 .sidebar-controls {
   display: grid;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 14px;
+  flex: 0 0 auto;
 }
 
 .results-summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 18px;
   padding: 12px 14px;
   border-radius: 16px;
   background: var(--soft-surface);
   border: 1px solid var(--soft-border);
   color: var(--text-main);
+  flex: 0 0 auto;
 }
 
 .results-summary-label {
   color: var(--text-soft);
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.sidebar-list-region {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.record-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.record-list-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.record-list-scroll::-webkit-scrollbar-thumb {
+  background: #d3bea4;
+  border-radius: 999px;
 }
 
 .control-group {
@@ -224,11 +254,12 @@ select {
 .record-list {
   display: grid;
   gap: 14px;
+  padding-bottom: 6px;
 }
 
 .record-list-item {
   width: 100%;
-  padding: 20px;
+  padding: 18px;
   border: 1px solid #deceb8;
   border-radius: 22px;
   background: linear-gradient(180deg, #fffdf8 0%, #f8f1e7 100%);
@@ -274,7 +305,9 @@ select {
 .detail-label,
 .meta-label,
 .detail-list span,
-.linked-record-list span {
+.linked-record-list span,
+.trail-time span,
+.trail-body p {
   color: var(--text-soft);
 }
 
@@ -347,13 +380,13 @@ select {
 }
 
 .detail-section {
-  padding: 28px;
-  min-height: 760px;
+  padding: 22px;
+  min-height: calc(100vh - 40px);
 }
 
 .detail-panel {
   display: grid;
-  gap: 22px;
+  gap: 18px;
 }
 
 .detail-header {
@@ -391,11 +424,11 @@ select {
 .linked-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
+  gap: 18px;
 }
 
 .detail-section-block {
-  padding: 22px;
+  padding: 18px;
   border: 1px solid var(--soft-border);
   border-radius: 20px;
   background: linear-gradient(180deg, #fffefb 0%, #faf4ea 100%);
@@ -425,7 +458,8 @@ select {
 }
 
 .detail-list,
-.linked-record-list {
+.linked-record-list,
+.trail-list {
   list-style: none;
   padding: 0;
   margin: 14px 0 0;
@@ -445,11 +479,8 @@ select {
   padding-bottom: 0;
 }
 
-.linked-record-list {
-  margin-top: 16px;
-}
-
-.linked-record-list li {
+.linked-record-list li,
+.trail-item {
   display: grid;
   gap: 4px;
   padding: 14px 16px;
@@ -462,7 +493,7 @@ select {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin: 16px 0 0;
+  margin: 14px 0 0;
 }
 
 .field-card {
@@ -483,6 +514,25 @@ select {
   color: var(--text-soft);
 }
 
+.podo-trail-panel {
+  margin-bottom: 18px;
+}
+
+.trail-item {
+  grid-template-columns: 170px 1fr;
+  gap: 14px;
+}
+
+.trail-time,
+.trail-body {
+  display: grid;
+  gap: 4px;
+}
+
+.trail-body p {
+  margin: 0;
+}
+
 .state-view,
 .list-empty {
   display: grid;
@@ -493,6 +543,10 @@ select {
   border: 1px dashed #d8cbb6;
   border-radius: 20px;
   background: #faf5ec;
+}
+
+.state-view {
+  width: 100%;
 }
 
 .state-view p,
@@ -533,11 +587,23 @@ select {
 
   .sidebar-panel {
     position: static;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .sidebar-list-region,
+  .record-list-scroll {
+    overflow: visible;
   }
 
   .detail-meta,
   .field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trail-item {
+    grid-template-columns: 1fr;
   }
 }
 

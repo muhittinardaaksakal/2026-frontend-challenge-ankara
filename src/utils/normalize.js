@@ -13,6 +13,19 @@ const PERSON_HINTS = [
   'reportedby',
   'seen by',
   'noted by',
+  'mentioned people',
+  'mentionedpeople',
+  'author',
+];
+
+const PERSON_FIELD_PRIORITY = [
+  'person name',
+  'sender name',
+  'recipient name',
+  'suspect name',
+  'seen with',
+  'mentioned people',
+  'author name',
 ];
 
 const PLACE_HINTS = [
@@ -60,20 +73,59 @@ const SUSPICIOUS_KEYWORDS = [
   'tampered',
 ];
 
+const NAME_STOPWORDS = new Set([
+  'yan',
+  'yanindaki',
+  'yanındaki',
+  'yakininda',
+  'yakınında',
+  'buradaki',
+  'herkes',
+  'kalabalik',
+  'kalabalık',
+  'messages',
+  'checkins',
+  'sightings',
+  'personal',
+  'notes',
+  'anonymous',
+  'tips',
+  'submit',
+]);
+
 function slugify(value) {
   return String(value || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^a-z0-9çğıöşü]+/g, ' ')
     .trim();
 }
 
-function startCase(value) {
-  return String(value || '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+function normalizeWhitespace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function parseFlexibleDate(value) {
+  const input = String(value || '').trim();
+
+  if (!input) {
+    return null;
+  }
+
+  const dayFirstMatch = input.match(
+    /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/,
+  );
+
+  if (dayFirstMatch) {
+    const [, day, month, year, hour = '0', minute = '0'] = dayFirstMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(input);
+
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function normalizeDate(value) {
@@ -81,9 +133,9 @@ function normalizeDate(value) {
     return '';
   }
 
-  const date = new Date(value);
+  const date = parseFlexibleDate(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (!date) {
     return String(value);
   }
 
@@ -164,6 +216,20 @@ function findFirstMatch(lookup, hints) {
   return matchedKey ? lookup[matchedKey] : '';
 }
 
+function findPriorityMatch(lookup, priorities) {
+  const keys = Object.keys(lookup);
+
+  for (const priority of priorities) {
+    const matchedKey = keys.find((key) => key.includes(priority));
+
+    if (matchedKey && lookup[matchedKey]) {
+      return lookup[matchedKey];
+    }
+  }
+
+  return '';
+}
+
 function collectValuesByHints(entries, hints) {
   return entries
     .filter((entry) => {
@@ -180,18 +246,60 @@ function uniqueStrings(values) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function normalizePersonCandidate(value) {
+  const cleaned = normalizeWhitespace(value).replace(/[;,]+$/g, '');
+
+  if (!cleaned) {
+    return '';
+  }
+
+  const stripped = cleaned
+    .replace(/^(?:ve|ile|with|and)\s+/i, '')
+    .replace(/\s+(?:ve|ile|with|and)$/i, '')
+    .trim();
+  const normalizedKey = slugify(stripped);
+
+  if (!normalizedKey || NAME_STOPWORDS.has(normalizedKey)) {
+    return '';
+  }
+
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+
+  if (tokens.length === 1) {
+    const token = tokens[0];
+    const plainLength = token.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g, '').length;
+
+    if (plainLength < 4) {
+      return '';
+    }
+  }
+
+  return /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(stripped) ? stripped : '';
+}
+
+function splitPersonValues(value) {
+  return String(value || '')
+    .split(/\s*(?:,|\/|&|\band\b|\bve\b|\bile\b)\s*/i)
+    .map(normalizePersonCandidate)
+    .filter(Boolean);
+}
+
 function extractNamesFromText(value) {
-  const matches = String(value || '').match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/g);
+  const matches = String(value || '').match(
+    /\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,}(?:\s+[A-ZÇĞİÖŞÜ]\.)?(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,})?\b/g,
+  );
 
   if (!matches) {
     return [];
   }
 
-  return uniqueStrings(matches);
+  return uniqueStrings(matches.map(normalizePersonCandidate).filter(Boolean));
 }
 
 function extractPlacesFromText(value) {
-  const matches = String(value || '').match(/\b(?:at|near|from|in)\s+([A-Z][A-Za-z0-9' -]{2,})/g);
+  const matches = String(value || '').match(
+    /\b(?:at|near|from|in)\s+([A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9' -]{2,})/g,
+  );
 
   if (!matches) {
     return [];
@@ -204,6 +312,8 @@ function extractPlacesFromText(value) {
 
 function buildContent(entries, lookups) {
   return (
+    findPriorityMatch(lookups.byLabel, ['text', 'tip', 'note', 'details']) ||
+    findPriorityMatch(lookups.byName, ['text', 'tip', 'note', 'details']) ||
     findFirstMatch(lookups.byLabel, CONTENT_HINTS) ||
     findFirstMatch(lookups.byName, CONTENT_HINTS) ||
     entries.find((entry) => entry.value)?.value ||
@@ -211,7 +321,7 @@ function buildContent(entries, lookups) {
   );
 }
 
-function buildSummary(sourceLabel, fields, content, person, place) {
+function buildSummary(sourceLabel, content, person, place) {
   const summaryParts = [sourceLabel];
 
   if (person) {
@@ -226,7 +336,21 @@ function buildSummary(sourceLabel, fields, content, person, place) {
     summaryParts.push(content.slice(0, 120));
   }
 
-  return summaryParts.join(' • ');
+  return summaryParts.join(' | ');
+}
+
+function findTimestampValue(lookups) {
+  return (
+    findPriorityMatch(lookups.byLabel, ['timestamp', 'time']) ||
+    findPriorityMatch(lookups.byName, ['timestamp', 'time'])
+  );
+}
+
+function buildRelatedPeople(fields, content) {
+  const hintedPeople = collectValuesByHints(fields, PERSON_HINTS).flatMap(splitPersonValues);
+  const inferredPeople = hintedPeople.length > 0 ? [] : extractNamesFromText(content);
+
+  return uniqueStrings([...hintedPeople, ...inferredPeople]);
 }
 
 function scoreSuspicion(text) {
@@ -240,7 +364,9 @@ function scoreSuspicion(text) {
 export function normalizeSubmission(source, submission) {
   const parsedAnswers = parseSubmissionAnswers(submission);
   const fields = parsedAnswers.entries.filter((entry) => entry.value !== '');
+  const timestampValue = findTimestampValue(parsedAnswers);
   const createdAtRaw =
+    timestampValue ||
     submission?.created_at ||
     submission?.updated_at ||
     submission?.createdAt ||
@@ -248,21 +374,20 @@ export function normalizeSubmission(source, submission) {
     '';
 
   const primaryPerson =
-    findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS) ||
-    findFirstMatch(parsedAnswers.byName, PERSON_HINTS);
+    normalizePersonCandidate(findPriorityMatch(parsedAnswers.byLabel, PERSON_FIELD_PRIORITY)) ||
+    normalizePersonCandidate(findPriorityMatch(parsedAnswers.byName, PERSON_FIELD_PRIORITY)) ||
+    normalizePersonCandidate(findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS)) ||
+    normalizePersonCandidate(findFirstMatch(parsedAnswers.byName, PERSON_HINTS));
   const primaryPlace =
     findFirstMatch(parsedAnswers.byLabel, PLACE_HINTS) ||
     findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
   const content = buildContent(fields, parsedAnswers);
-  const textBlob = [primaryPerson, primaryPlace, content, ...fields.map((field) => field.value)].join(' ');
-  const relatedPeople = uniqueStrings([
-    ...collectValuesByHints(fields, PERSON_HINTS),
-    ...extractNamesFromText(content),
-  ]);
+  const relatedPeople = buildRelatedPeople(fields, content);
   const relatedPlaces = uniqueStrings([
     ...collectValuesByHints(fields, PLACE_HINTS),
     ...extractPlacesFromText(content),
   ]);
+  const textBlob = [primaryPerson, primaryPlace, content, ...fields.map((field) => field.value)].join(' ');
   const suspicionScore = scoreSuspicion(textBlob);
 
   return {
@@ -273,6 +398,7 @@ export function normalizeSubmission(source, submission) {
     formId: source.formId,
     createdAt: normalizeDate(createdAtRaw),
     createdAtRaw,
+    sortAt: parseFlexibleDate(createdAtRaw)?.getTime() || 0,
     status: submission?.status || '',
     fields,
     fieldsByLabel: parsedAnswers.byLabel,
@@ -280,7 +406,7 @@ export function normalizeSubmission(source, submission) {
     person: primaryPerson || relatedPeople[0] || '',
     place: primaryPlace || relatedPlaces[0] || '',
     content,
-    summary: buildSummary(source.label, fields, content, primaryPerson, primaryPlace),
+    summary: buildSummary(source.label, content, primaryPerson || relatedPeople[0] || '', primaryPlace || relatedPlaces[0] || ''),
     relatedPeople,
     relatedPlaces,
     suspicionScore,
@@ -297,6 +423,6 @@ export function normalizeInvestigationSources(sourceResponses) {
   });
 
   return records.sort((left, right) => {
-    return new Date(right.createdAtRaw || 0).getTime() - new Date(left.createdAtRaw || 0).getTime();
+    return right.sortAt - left.sortAt;
   });
 }

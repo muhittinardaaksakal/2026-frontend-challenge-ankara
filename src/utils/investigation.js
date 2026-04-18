@@ -26,6 +26,25 @@ function getTopEntity(entities) {
   return entities[0]?.value || '';
 }
 
+function includesPodo(record) {
+  const haystack = [record.person, record.content, record.summary, ...record.relatedPeople]
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes('podo');
+}
+
+function buildPodoTrail(records) {
+  return records
+    .filter((record) => {
+      return includesPodo(record) && ['sightings', 'checkins', 'messages', 'notes', 'tips'].includes(record.source);
+    })
+    .sort((left, right) => {
+      return left.sortAt - right.sortAt;
+    })
+    .slice(-8);
+}
+
 export function buildInvestigationModel(sourceResponses) {
   const records = normalizeInvestigationSources(sourceResponses);
   const people = buildEntityCounts(records, (record) => uniqueStrings([record.person, ...record.relatedPeople]));
@@ -51,6 +70,7 @@ export function buildInvestigationModel(sourceResponses) {
       topPlace: getTopEntity(places),
       suspiciousLead,
       latestSighting,
+      podoTrail: buildPodoTrail(records),
     },
   };
 }
@@ -92,10 +112,8 @@ export function getLinkedRecords(selectedRecord, records) {
       return false;
     }
 
-    const sharesPerson =
-      [record.person, ...record.relatedPeople].some((value) => linkedPeople.has(value));
-    const sharesPlace =
-      [record.place, ...record.relatedPlaces].some((value) => linkedPlaces.has(value));
+    const sharesPerson = [record.person, ...record.relatedPeople].some((value) => linkedPeople.has(value));
+    const sharesPlace = [record.place, ...record.relatedPlaces].some((value) => linkedPlaces.has(value));
 
     return sharesPerson || sharesPlace;
   });

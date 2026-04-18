@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getInvestigationSubmissions } from './api/jotform';
 import DetailPanel from './components/DetailPanel';
 import FilterBar from './components/FilterBar';
+import PodoTrail from './components/PodoTrail';
 import RecordList from './components/RecordList';
 import SearchBar from './components/SearchBar';
 import StateView from './components/StateView';
@@ -24,6 +25,7 @@ const INITIAL_STATE = {
     topPlace: '',
     suspiciousLead: null,
     latestSighting: null,
+    podoTrail: [],
   },
 };
 
@@ -173,6 +175,7 @@ export default function App() {
               options={focusOptions}
             />
           </div>
+
           {!loading && !error ? (
             <div className="results-summary">
               <span className="results-summary-label">Visible leads</span>
@@ -180,24 +183,28 @@ export default function App() {
             </div>
           ) : null}
 
-          {loading ? (
-            <StateView
-              title="Loading investigation feeds"
-              message="Fetching Jotform submissions and preparing the dashboard."
-            />
-          ) : error ? (
-            <StateView
-              title="Could not load case data"
-              message={error}
-              tone="error"
-            />
-          ) : (
-            <RecordList
-              records={filteredRecords}
-              selectedRecordId={selectedRecordId}
-              onSelect={setSelectedRecordId}
-            />
-          )}
+          <div className="sidebar-list-region">
+            {loading ? (
+              <StateView
+                title="Loading investigation feeds"
+                message="Fetching Jotform submissions and preparing the dashboard."
+              />
+            ) : error ? (
+              <StateView
+                title="Could not load case data"
+                message={error}
+                tone="error"
+              />
+            ) : (
+              <div className="record-list-scroll">
+                <RecordList
+                  records={filteredRecords}
+                  selectedRecordId={selectedRecordId}
+                  onSelect={setSelectedRecordId}
+                />
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="panel detail-section">
@@ -219,11 +226,14 @@ export default function App() {
               }
             />
           ) : hasRecords && selectedRecord ? (
-            <DetailPanel
-              record={selectedRecord}
-              linkedRecords={linkedRecords}
-              latestSighting={data.summary.latestSighting}
-            />
+            <>
+              <PodoTrail records={data.summary.podoTrail} />
+              <DetailPanel
+                record={selectedRecord}
+                linkedRecords={linkedRecords}
+                latestSighting={data.summary.latestSighting}
+              />
+            </>
           ) : (
             <StateView
               title="No leads found"
