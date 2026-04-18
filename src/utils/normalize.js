@@ -74,6 +74,8 @@ const SUSPICIOUS_KEYWORDS = [
 ];
 
 const NAME_STOPWORDS = new Set([
+  'surekli',
+  'sürekli',
   'yan',
   'yanindaki',
   'yanındaki',
@@ -83,6 +85,14 @@ const NAME_STOPWORDS = new Set([
   'herkes',
   'kalabalik',
   'kalabalık',
+  'burasi',
+  'orasi',
+  'aslinda',
+  'aslında',
+  'galiba',
+  'biraz',
+  'sonra',
+  'sadece',
   'messages',
   'checkins',
   'sightings',
@@ -93,11 +103,27 @@ const NAME_STOPWORDS = new Set([
   'submit',
 ]);
 
-function slugify(value) {
+function transliterateTurkish(value) {
   return String(value || '')
+    .replace(/ç/g, 'c')
+    .replace(/Ç/g, 'C')
+    .replace(/ğ/g, 'g')
+    .replace(/Ğ/g, 'G')
+    .replace(/ı/g, 'i')
+    .replace(/İ/g, 'I')
+    .replace(/ö/g, 'o')
+    .replace(/Ö/g, 'O')
+    .replace(/ş/g, 's')
+    .replace(/Ş/g, 'S')
+    .replace(/ü/g, 'u')
+    .replace(/Ü/g, 'U');
+}
+
+function slugify(value) {
+  return transliterateTurkish(value)
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9çğıöşü]+/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
 
@@ -246,8 +272,29 @@ function uniqueStrings(values) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function chooseBetterDisplayName(currentValue, nextValue) {
+  if (!currentValue) {
+    return nextValue;
+  }
+
+  const currentHasInitial = /\b[A-Z]\.?$/.test(currentValue);
+  const nextHasInitial = /\b[A-Z]\.?$/.test(nextValue);
+
+  if (currentHasInitial !== nextHasInitial) {
+    return currentHasInitial ? currentValue : nextValue;
+  }
+
+  if (nextValue.length !== currentValue.length) {
+    return nextValue.length > currentValue.length ? nextValue : currentValue;
+  }
+
+  return nextValue.localeCompare(currentValue, 'tr', { sensitivity: 'base' }) < 0 ? nextValue : currentValue;
+}
+
 function normalizePersonCandidate(value) {
-  const cleaned = normalizeWhitespace(value).replace(/[;,]+$/g, '');
+  const cleaned = normalizeWhitespace(value)
+    .replace(/[;,]+$/g, '')
+    .replace(/\s+/g, ' ');
 
   if (!cleaned) {
     return '';
@@ -267,7 +314,7 @@ function normalizePersonCandidate(value) {
 
   if (tokens.length === 1) {
     const token = tokens[0];
-    const plainLength = token.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g, '').length;
+    const plainLength = slugify(token).replace(/\s+/g, '').length;
 
     if (plainLength < 4) {
       return '';
@@ -275,6 +322,29 @@ function normalizePersonCandidate(value) {
   }
 
   return /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(stripped) ? stripped : '';
+}
+
+function createCanonicalPersonKey(value) {
+  const normalized = slugify(value)
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  const tokens = normalized.split(' ').filter(Boolean);
+
+  if (tokens.length >= 2 && tokens[tokens.length - 1].length === 1) {
+    tokens.pop();
+  }
+
+  return tokens.join(' ');
+}
+
+function createCanonicalPlaceKey(value) {
+  return slugify(value);
 }
 
 function splitPersonValues(value) {
@@ -346,11 +416,52 @@ function findTimestampValue(lookups) {
   );
 }
 
-function buildRelatedPeople(fields, content) {
+function buildPersonEntities(fields, content) {
   const hintedPeople = collectValuesByHints(fields, PERSON_HINTS).flatMap(splitPersonValues);
   const inferredPeople = hintedPeople.length > 0 ? [] : extractNamesFromText(content);
+  const selectedPeople = [...hintedPeople, ...inferredPeople];
+  const byKey = new Map();
 
-  return uniqueStrings([...hintedPeople, ...inferredPeople]);
+  selectedPeople.forEach((person) => {
+    const key = createCanonicalPersonKey(person);
+
+    if (!key) {
+      return;
+    }
+
+    const currentDisplay = byKey.get(key);
+    byKey.set(key, chooseBetterDisplayName(currentDisplay, person));
+  });
+
+  return [...byKey.entries()].map(([key, display]) => ({
+    key,
+    display,
+  }));
+}
+
+function buildPlaceEntities(fields, content) {
+  const selectedPlaces = uniqueStrings([
+    ...collectValuesByHints(fields, PLACE_HINTS),
+    ...extractPlacesFromText(content),
+  ]);
+  const byKey = new Map();
+
+  selectedPlaces.forEach((place) => {
+    const key = createCanonicalPlaceKey(place);
+
+    if (!key) {
+      return;
+    }
+
+    if (!byKey.has(key)) {
+      byKey.set(key, place);
+    }
+  });
+
+  return [...byKey.entries()].map(([key, display]) => ({
+    key,
+    display,
+  }));
 }
 
 function scoreSuspicion(text) {
@@ -373,22 +484,51 @@ export function normalizeSubmission(source, submission) {
     submission?.updatedAt ||
     '';
 
-  const primaryPerson =
+  const primaryPersonDisplay =
     normalizePersonCandidate(findPriorityMatch(parsedAnswers.byLabel, PERSON_FIELD_PRIORITY)) ||
     normalizePersonCandidate(findPriorityMatch(parsedAnswers.byName, PERSON_FIELD_PRIORITY)) ||
     normalizePersonCandidate(findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS)) ||
     normalizePersonCandidate(findFirstMatch(parsedAnswers.byName, PERSON_HINTS));
-  const primaryPlace =
+  const primaryPlaceDisplay =
     findFirstMatch(parsedAnswers.byLabel, PLACE_HINTS) ||
     findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
   const content = buildContent(fields, parsedAnswers);
-  const relatedPeople = buildRelatedPeople(fields, content);
-  const relatedPlaces = uniqueStrings([
-    ...collectValuesByHints(fields, PLACE_HINTS),
-    ...extractPlacesFromText(content),
-  ]);
-  const textBlob = [primaryPerson, primaryPlace, content, ...fields.map((field) => field.value)].join(' ');
+  const personEntities = buildPersonEntities(fields, content);
+  const placeEntities = buildPlaceEntities(fields, content);
+  const primaryPersonKey = createCanonicalPersonKey(primaryPersonDisplay);
+  const primaryPlaceKey = createCanonicalPlaceKey(primaryPlaceDisplay);
+  const person =
+    primaryPersonDisplay ||
+    personEntities[0]?.display ||
+    '';
+  const personKey =
+    primaryPersonKey ||
+    personEntities[0]?.key ||
+    '';
+  const place =
+    primaryPlaceDisplay ||
+    placeEntities[0]?.display ||
+    '';
+  const placeKey =
+    primaryPlaceKey ||
+    placeEntities[0]?.key ||
+    '';
+  const relatedPeople = personEntities.map((item) => item.display);
+  const relatedPersonKeys = personEntities.map((item) => item.key);
+  const relatedPlaces = placeEntities.map((item) => item.display);
+  const relatedPlaceKeys = placeEntities.map((item) => item.key);
+  const textBlob = [person, place, content, ...fields.map((field) => field.value)].join(' ');
   const suspicionScore = scoreSuspicion(textBlob);
+  const visibleSearchText = [
+    source.label,
+    person,
+    place,
+    buildSummary(source.label, content, person, place),
+    personKey,
+    placeKey,
+  ]
+    .join(' ')
+    .toLowerCase();
 
   return {
     id: `${source.key}-${submission?.id || submission?.submission_id || crypto.randomUUID()}`,
@@ -403,16 +543,18 @@ export function normalizeSubmission(source, submission) {
     fields,
     fieldsByLabel: parsedAnswers.byLabel,
     fieldsByName: parsedAnswers.byName,
-    person: primaryPerson || relatedPeople[0] || '',
-    place: primaryPlace || relatedPlaces[0] || '',
+    person,
+    personKey,
+    place,
+    placeKey,
     content,
-    summary: buildSummary(source.label, content, primaryPerson || relatedPeople[0] || '', primaryPlace || relatedPlaces[0] || ''),
+    summary: buildSummary(source.label, content, person, place),
     relatedPeople,
+    relatedPersonKeys,
     relatedPlaces,
+    relatedPlaceKeys,
     suspicionScore,
-    searchText: [source.label, content, primaryPerson, primaryPlace, ...relatedPeople, ...relatedPlaces]
-      .join(' ')
-      .toLowerCase(),
+    searchText: visibleSearchText,
     raw: submission,
   };
 }

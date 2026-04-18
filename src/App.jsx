@@ -121,16 +121,15 @@ export default function App() {
 
   const focusOptions = useMemo(() => {
     const values = [
-      ...data.people.slice(0, 12).map((item) => item.value),
-      ...data.places.slice(0, 12).map((item) => item.value),
+      ...data.people.slice(0, 12).map((item) => ({ value: item.key, label: item.value })),
+      ...data.places.slice(0, 12).map((item) => ({ value: item.key, label: item.value })),
     ];
 
     return [
       { value: 'all', label: 'All people and places' },
-      ...[...new Set(values)].map((value) => ({
-        value,
-        label: value,
-      })),
+      ...values.filter((item, index, collection) => {
+        return collection.findIndex((candidate) => candidate.value === item.value) === index;
+      }),
     ];
   }, [data.people, data.places]);
 

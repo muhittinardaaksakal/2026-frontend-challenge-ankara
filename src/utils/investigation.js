@@ -13,13 +13,28 @@ function buildEntityCounts(records, selector) {
 
   records.forEach((record) => {
     selector(record).forEach((value) => {
-      counts.set(value, (counts.get(value) || 0) + 1);
+      const currentItem = counts.get(value.key);
+
+      if (!currentItem) {
+        counts.set(value.key, {
+          key: value.key,
+          value: value.value,
+          count: 1,
+        });
+        return;
+      }
+
+      counts.set(value.key, {
+        ...currentItem,
+        value: value.value.length > currentItem.value.length ? value.value : currentItem.value,
+        count: currentItem.count + 1,
+      });
     });
   });
 
-  return [...counts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+  return [...counts.values()].sort((left, right) => {
+    return right.count - left.count || left.value.localeCompare(right.value);
+  });
 }
 
 function getTopEntity(entities) {
@@ -47,8 +62,28 @@ function buildPodoTrail(records) {
 
 export function buildInvestigationModel(sourceResponses) {
   const records = normalizeInvestigationSources(sourceResponses);
-  const people = buildEntityCounts(records, (record) => uniqueStrings([record.person, ...record.relatedPeople]));
-  const places = buildEntityCounts(records, (record) => uniqueStrings([record.place, ...record.relatedPlaces]));
+  const people = buildEntityCounts(records, (record) =>
+    uniqueStrings([record.personKey, ...record.relatedPersonKeys])
+      .filter(Boolean)
+      .map((key) => ({
+        key,
+        value:
+          (record.personKey === key && record.person) ||
+          record.relatedPeople[record.relatedPersonKeys.indexOf(key)] ||
+          key,
+      })),
+  );
+  const places = buildEntityCounts(records, (record) =>
+    uniqueStrings([record.placeKey, ...record.relatedPlaceKeys])
+      .filter(Boolean)
+      .map((key) => ({
+        key,
+        value:
+          (record.placeKey === key && record.place) ||
+          record.relatedPlaces[record.relatedPlaceKeys.indexOf(key)] ||
+          key,
+      })),
+  );
   const recordsBySource = records.reduce((accumulator, record) => {
     accumulator[record.source] = accumulator[record.source] || [];
     accumulator[record.source].push(record);
@@ -82,15 +117,14 @@ export function filterInvestigationRecords(records, filters) {
     const matchesQuery =
       normalizedQuery === '' ||
       record.searchText.includes(normalizedQuery) ||
-      record.id.toLowerCase().includes(normalizedQuery) ||
-      record.summary.toLowerCase().includes(normalizedQuery);
+      record.id.toLowerCase().includes(normalizedQuery);
     const matchesSource = filters.source === 'all' || record.source === filters.source;
     const matchesFocus =
       filters.focus === 'all' ||
-      record.person === filters.focus ||
-      record.place === filters.focus ||
-      record.relatedPeople.includes(filters.focus) ||
-      record.relatedPlaces.includes(filters.focus);
+      record.personKey === filters.focus ||
+      record.placeKey === filters.focus ||
+      record.relatedPersonKeys.includes(filters.focus) ||
+      record.relatedPlaceKeys.includes(filters.focus);
 
     return matchesQuery && matchesSource && matchesFocus;
   });
@@ -104,16 +138,16 @@ export function getLinkedRecords(selectedRecord, records) {
     };
   }
 
-  const linkedPeople = new Set([selectedRecord.person, ...selectedRecord.relatedPeople].filter(Boolean));
-  const linkedPlaces = new Set([selectedRecord.place, ...selectedRecord.relatedPlaces].filter(Boolean));
+  const linkedPeople = new Set([selectedRecord.personKey, ...selectedRecord.relatedPersonKeys].filter(Boolean));
+  const linkedPlaces = new Set([selectedRecord.placeKey, ...selectedRecord.relatedPlaceKeys].filter(Boolean));
 
   const relatedRecords = records.filter((record) => {
     if (record.id === selectedRecord.id) {
       return false;
     }
 
-    const sharesPerson = [record.person, ...record.relatedPeople].some((value) => linkedPeople.has(value));
-    const sharesPlace = [record.place, ...record.relatedPlaces].some((value) => linkedPlaces.has(value));
+    const sharesPerson = [record.personKey, ...record.relatedPersonKeys].some((value) => linkedPeople.has(value));
+    const sharesPlace = [record.placeKey, ...record.relatedPlaceKeys].some((value) => linkedPlaces.has(value));
 
     return sharesPerson || sharesPlace;
   });
