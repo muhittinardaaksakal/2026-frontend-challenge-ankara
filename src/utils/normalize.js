@@ -40,6 +40,7 @@ const PLACE_HINTS = [
   'checkpoint',
   'check-in',
   'checkin',
+  'coordinates',
 ];
 
 const CONTENT_HINTS = [
@@ -98,6 +99,7 @@ const NAME_STOPWORDS = new Set([
   'sunun',
   'oyle',
   'boyle',
+  'buradaki',
   'messages',
   'checkins',
   'sightings',
@@ -286,8 +288,8 @@ function chooseBetterDisplayName(currentValue, nextValue) {
     return nextValue;
   }
 
-  const currentHasInitial = /\b[A-Z]\.?$/.test(currentValue);
-  const nextHasInitial = /\b[A-Z]\.?$/.test(nextValue);
+  const currentHasInitial = /\b[A-Z]\.?$/u.test(currentValue);
+  const nextHasInitial = /\b[A-Z]\.?$/u.test(nextValue);
 
   if (currentHasInitial !== nextHasInitial) {
     return currentHasInitial ? currentValue : nextValue;
@@ -358,7 +360,7 @@ function normalizePersonCandidate(value) {
     }
   }
 
-  return /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(stripped) ? stripped : '';
+  return /[A-Za-zÇĞİÖŞÜçğıöşü]/u.test(stripped) ? stripped : '';
 }
 
 function createCanonicalPersonKey(value) {
@@ -367,7 +369,17 @@ function createCanonicalPersonKey(value) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  return normalized;
+  if (!normalized) {
+    return '';
+  }
+
+  const tokens = normalized.split(' ').filter(Boolean);
+
+  if (tokens.length >= 2 && tokens[0].length >= 4 && tokens[tokens.length - 1].length === 1) {
+    tokens.pop();
+  }
+
+  return tokens.join(' ');
 }
 
 function createCanonicalPlaceKey(value) {
@@ -383,7 +395,7 @@ function splitPersonValues(value) {
 
 function extractNamesFromText(value) {
   const matches = String(value || '').match(
-    /\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,}(?:\s+[A-ZÇĞİÖŞÜ]\.)?(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,})?\b/g,
+    /\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,}(?:\s+[A-ZÇĞİÖŞÜ]\.)?(?:\s+[A-ZÇĞİÖŞÜ][a-zçğıöşü]{3,})?\b/gu,
   );
 
   if (!matches) {
@@ -395,7 +407,7 @@ function extractNamesFromText(value) {
 
 function extractPlacesFromText(value) {
   const matches = String(value || '').match(
-    /\b(?:at|near|from|in)\s+([A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9' -]{2,})/g,
+    /\b(?:at|near|from|in)\s+([A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü0-9' -]{2,})/gu,
   );
 
   if (!matches) {
@@ -443,29 +455,6 @@ function findTimestampValue(lookups) {
   );
 }
 
-function buildPersonEntities(fields, content) {
-  const hintedPeople = collectValuesByHints(fields, PERSON_HINTS).flatMap(splitPersonValues);
-  const inferredPeople = hintedPeople.length > 0 ? [] : extractNamesFromText(content);
-  const selectedPeople = [...hintedPeople, ...inferredPeople];
-  const byKey = new Map();
-
-  selectedPeople.forEach((person) => {
-    const key = createCanonicalPersonKey(person);
-
-    if (!key) {
-      return;
-    }
-
-    const currentDisplay = byKey.get(key);
-    byKey.set(key, chooseBetterDisplayName(currentDisplay, person));
-  });
-
-  return [...byKey.entries()].map(([key, display]) => ({
-    key,
-    display,
-  }));
-}
-
 function buildPlaceEntities(fields, content) {
   const selectedPlaces = uniqueStrings([
     ...collectValuesByHints(fields, PLACE_HINTS),
@@ -490,6 +479,41 @@ function buildPlaceEntities(fields, content) {
   }));
 }
 
+function buildPersonEntities(fields, content, blockedPlaceKeys) {
+  const hintedPeople = collectValuesByHints(fields, PERSON_HINTS).flatMap(splitPersonValues);
+  const inferredPeople = hintedPeople.length > 0 ? [] : extractNamesFromText(content);
+  const selectedPeople = [...hintedPeople, ...inferredPeople];
+  const byKey = new Map();
+
+  selectedPeople.forEach((person) => {
+    const key = createCanonicalPersonKey(person);
+
+    if (!key || blockedPlaceKeys.has(key)) {
+      return;
+    }
+
+    const currentDisplay = byKey.get(key);
+    byKey.set(key, chooseBetterDisplayName(currentDisplay, person));
+  });
+
+  return [...byKey.entries()].map(([key, display]) => ({
+    key,
+    display,
+  }));
+}
+
+function createLeadTitle(sourceLabel, person, place) {
+  if (person) {
+    return person;
+  }
+
+  if (place) {
+    return `${sourceLabel} at ${place}`;
+  }
+
+  return sourceLabel;
+}
+
 function scoreSuspicion(text) {
   const normalizedText = String(text || '').toLowerCase();
 
@@ -510,21 +534,27 @@ export function normalizeSubmission(source, submission) {
     submission?.updatedAt ||
     '';
 
+  const primaryPlaceDisplay =
+    findFirstMatch(parsedAnswers.byLabel, PLACE_HINTS) ||
+    findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
+  const content = buildContent(fields, parsedAnswers);
+  const placeEntities = buildPlaceEntities(fields, content);
+  const blockedPlaceKeys = new Set([
+    createCanonicalPlaceKey(primaryPlaceDisplay),
+    ...placeEntities.map((item) => item.key),
+  ].filter(Boolean));
   const primaryPersonDisplay =
     normalizePersonCandidate(findPriorityMatch(parsedAnswers.byLabel, PERSON_FIELD_PRIORITY)) ||
     normalizePersonCandidate(findPriorityMatch(parsedAnswers.byName, PERSON_FIELD_PRIORITY)) ||
     normalizePersonCandidate(findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS)) ||
     normalizePersonCandidate(findFirstMatch(parsedAnswers.byName, PERSON_HINTS));
-  const primaryPlaceDisplay =
-    findFirstMatch(parsedAnswers.byLabel, PLACE_HINTS) ||
-    findFirstMatch(parsedAnswers.byName, PLACE_HINTS);
-  const content = buildContent(fields, parsedAnswers);
-  const personEntities = buildPersonEntities(fields, content);
-  const placeEntities = buildPlaceEntities(fields, content);
+  const personEntities = buildPersonEntities(fields, content, blockedPlaceKeys);
   const primaryPersonKey = createCanonicalPersonKey(primaryPersonDisplay);
   const primaryPlaceKey = createCanonicalPlaceKey(primaryPlaceDisplay);
-  const person = primaryPersonDisplay || '';
-  const personKey = primaryPersonKey || '';
+  const safePrimaryPerson =
+    primaryPersonKey && !blockedPlaceKeys.has(primaryPersonKey) ? primaryPersonDisplay : '';
+  const person = safePrimaryPerson || '';
+  const personKey = safePrimaryPerson ? primaryPersonKey : '';
   const place = primaryPlaceDisplay || placeEntities[0]?.display || '';
   const placeKey = primaryPlaceKey || placeEntities[0]?.key || '';
   const relatedPeople = personEntities.map((item) => item.display);
@@ -533,17 +563,18 @@ export function normalizeSubmission(source, submission) {
   const relatedPlaceKeys = placeEntities.map((item) => item.key);
   const textBlob = [person, place, content, ...fields.map((field) => field.value)].join(' ');
   const suspicionScore = scoreSuspicion(textBlob);
+  const summary = buildSummary(source.label, content, person, place);
   const visibleSearchText = [
     source.label,
     person,
     place,
-    buildSummary(source.label, content, person, place),
+    summary,
     personKey,
     placeKey,
   ]
     .join(' ')
     .toLowerCase();
-  const title = person || place || source.label;
+  const title = createLeadTitle(source.label, person, place);
 
   return {
     id: `${source.key}-${submission?.id || submission?.submission_id || crypto.randomUUID()}`,
@@ -564,7 +595,7 @@ export function normalizeSubmission(source, submission) {
     place,
     placeKey,
     content,
-    summary: buildSummary(source.label, content, person, place),
+    summary,
     relatedPeople,
     relatedPersonKeys,
     relatedPlaces,

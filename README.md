@@ -1,19 +1,28 @@
 # Missing Podo: The Ankara Case
 
-React + Vite investigation dashboard for the Jotform frontend hackathon challenge.
+Participant: `Muhittin Arda Aksakal`
 
-The app pulls live submission data from five Jotform forms, normalizes mixed answer shapes into a shared record model, and presents the case as an investigation workspace instead of a raw JSON dump.
+Missing Podo is a React + Vite investigation dashboard built for the Jotform frontend challenge. The app pulls live submissions from five Jotform forms, normalizes mixed response shapes into a usable investigation record model, and turns them into a searchable case workspace instead of a raw JSON dump.
 
-## What the app does
+## Core Features
 
-- fetches Checkins, Messages, Sightings, Personal Notes, and Anonymous Tips from the Jotform API
-- safely parses each submission's `answers` object into readable label/value fields
-- normalizes every submission into a shared investigation record shape
-- links records through detected people and places
-- supports search, source filtering, and person/place focus filtering
-- shows loading, error, empty, and unselected states clearly
+- live Jotform API integration for Checkins, Messages, Sightings, Personal Notes, and Anonymous Tips
+- answer parsing and normalization into a shared record structure
+- investigation-focused master/detail workflow
+- source, person, place, and text filtering
+- linked record exploration across sources
+- compact Podo Trail panel for the last seen chain
+- loading, error, empty, and safe fallback states
 
-## Run locally
+## Tech Stack
+
+- React
+- Vite
+- JavaScript
+- native `fetch`
+- plain CSS
+
+## Local Setup
 
 1. Install dependencies:
 
@@ -21,12 +30,12 @@ The app pulls live submission data from five Jotform forms, normalizes mixed ans
 npm install
 ```
 
-2. Create `.env.local` in the project root.
+2. Create `.env.local` in the repository root.
 
-3. Copy the keys from `.env.example` and set your real Jotform API key:
+3. Add the following environment variables:
 
 ```bash
-VITE_JOTFORM_API_KEY=your_real_key_here
+VITE_JOTFORM_API_KEY=YOUR_API_KEY
 VITE_CHECKINS_FORM_ID=261065067494966
 VITE_MESSAGES_FORM_ID=261065765723966
 VITE_SIGHTINGS_FORM_ID=261065244786967
@@ -34,15 +43,32 @@ VITE_NOTES_FORM_ID=261065509008958
 VITE_TIPS_FORM_ID=261065875889981
 ```
 
-4. Start the app:
+4. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-5. Production build:
+5. Create a production build:
 
 ```bash
+npm run build
+```
+
+## Environment Variables
+
+- `VITE_JOTFORM_API_KEY`
+- `VITE_CHECKINS_FORM_ID`
+- `VITE_MESSAGES_FORM_ID`
+- `VITE_SIGHTINGS_FORM_ID`
+- `VITE_NOTES_FORM_ID`
+- `VITE_TIPS_FORM_ID`
+
+## Commands
+
+```bash
+npm install
+npm run dev
 npm run build
 ```
 
@@ -56,6 +82,7 @@ src/
     DetailPanel.jsx
     FilterBar.jsx
     LinkedRecordGroup.jsx
+    PodoTrail.jsx
     RecordList.jsx
     SearchBar.jsx
     StateView.jsx
@@ -67,24 +94,24 @@ src/
   index.css
 ```
 
-- `src/api/jotform.js` handles Jotform requests and fetches all five form feeds with `Promise.all`.
-- `src/utils/normalize.js` inspects submission answers and converts them into consistent records.
-- `src/utils/investigation.js` derives summary data, filters, and linked records for the UI.
-- `src/App.jsx` coordinates loading, selection, filters, and screen states.
+- `src/api/jotform.js` fetches all available submissions for each form with pagination-aware requests.
+- `src/utils/normalize.js` converts raw Jotform answers into stable investigation records, person/place keys, and UI-friendly labels.
+- `src/utils/investigation.js` derives filter options, linked records, summary cards, and the Podo Trail.
+- `src/App.jsx` coordinates loading, filters, selection, and high-level layout state.
 
-## Investigation approach
+## Investigation Approach
 
-The MVP is record-centric with a linked investigation detail view:
+The app is designed around a record-first investigation flow:
 
-- top summary for quick case orientation
-- left side for search and lead browsing
-- right side for selected lead detail
-- linked records grouped by source to reveal cross-source connections
+- use the left column to narrow the case with text, source, person, and place filters
+- inspect one lead at a time in the right-side detail panel
+- follow related records grouped by source to understand cross-source connections
+- use the Podo Trail as a compact timeline for the last visible chain of Podo mentions
 
-Because Jotform field labels can vary by form, person and place extraction is intentionally heuristic and flexible. The app does not assume a single rigid schema; it builds useful summaries from field labels, field names, and readable answer values.
+This solution keeps heuristics intentionally conservative. When the data is ambiguous, the UI prefers neutral titles and stable grouping over aggressive guessing.
 
 ## Notes
 
 - Do not commit `.env.local`.
 - Do not hardcode the API key in source files.
-- `.env.example` only contains placeholders and public form IDs.
+- `.env.example` contains placeholders only.

@@ -19,7 +19,7 @@ export default function DetailPanel({ record, linkedRecords, latestSighting }) {
       <div className="detail-header">
         <div>
           <p className="detail-label">Selected Lead</p>
-          <h2>{record.person || record.place || record.sourceLabel}</h2>
+          <h2>{record.title || record.person || record.sourceLabel}</h2>
         </div>
         <span className={`source-badge source-${record.source}`}>{record.sourceLabel}</span>
       </div>

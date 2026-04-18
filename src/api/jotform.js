@@ -1,4 +1,5 @@
 const JOTFORM_API_BASE_URL = 'https://api.jotform.com';
+const DEFAULT_PAGE_SIZE = 20;
 
 const SOURCE_CONFIG = [
   {
@@ -48,10 +49,16 @@ function assertSourceConfig() {
   }
 }
 
-async function requestJotform(pathname) {
+async function requestJotform(pathname, searchParams = {}) {
   const apiKey = getApiKey();
   const url = new URL(pathname, JOTFORM_API_BASE_URL);
   url.searchParams.set('apiKey', apiKey);
+
+  Object.entries(searchParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
 
   const response = await fetch(url.toString());
 
@@ -68,21 +75,55 @@ async function requestJotform(pathname) {
   return payload;
 }
 
-async function fetchFormSubmissions(source) {
-  const payload = await requestJotform(`/form/${source.formId}/submissions`);
-  const submissions = Array.isArray(payload.content) ? payload.content : [];
+function dedupeSubmissions(submissions) {
+  const seenIds = new Set();
+
+  return submissions.filter((submission) => {
+    const submissionId = String(submission?.id || submission?.submission_id || '');
+
+    if (!submissionId || seenIds.has(submissionId)) {
+      return false;
+    }
+
+    seenIds.add(submissionId);
+    return true;
+  });
+}
+
+async function fetchAllFormSubmissions(source) {
+  let offset = 0;
+  let hasMore = true;
+  let latestPayload = null;
+  const collectedSubmissions = [];
+
+  while (hasMore) {
+    const payload = await requestJotform(`/form/${source.formId}/submissions`, {
+      limit: DEFAULT_PAGE_SIZE,
+      offset,
+    });
+    const submissions = Array.isArray(payload.content) ? payload.content : [];
+
+    collectedSubmissions.push(...submissions);
+    latestPayload = payload;
+
+    if (submissions.length < DEFAULT_PAGE_SIZE) {
+      hasMore = false;
+    } else {
+      offset += DEFAULT_PAGE_SIZE;
+    }
+  }
 
   return {
     ...source,
-    submissions,
-    response: payload,
+    submissions: dedupeSubmissions(collectedSubmissions),
+    response: latestPayload,
   };
 }
 
 export async function getInvestigationSubmissions() {
   assertSourceConfig();
 
-  const sources = await Promise.all(SOURCE_CONFIG.map(fetchFormSubmissions));
+  const sources = await Promise.all(SOURCE_CONFIG.map(fetchAllFormSubmissions));
 
   return {
     sources,
