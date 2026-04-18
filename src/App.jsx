@@ -1,24 +1,38 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getRecordExplorerData } from './api/records';
+import { getInvestigationSubmissions } from './api/jotform';
 import DetailPanel from './components/DetailPanel';
 import FilterBar from './components/FilterBar';
 import RecordList from './components/RecordList';
 import SearchBar from './components/SearchBar';
 import StateView from './components/StateView';
-import { filterRecords } from './utils/filters';
-import { getRelatedItems } from './utils/relations';
+import SummaryBar from './components/SummaryBar';
+import {
+  buildInvestigationModel,
+  filterInvestigationRecords,
+  getLinkedRecords,
+} from './utils/investigation';
 
 const INITIAL_STATE = {
   records: [],
+  recordsBySource: {},
   people: [],
-  events: [],
+  places: [],
+  summary: {
+    totalRecords: 0,
+    totalSources: 0,
+    topPerson: '',
+    topPlace: '',
+    suspiciousLead: null,
+    latestSighting: null,
+  },
 };
 
 export default function App() {
   const [data, setData] = useState(INITIAL_STATE);
   const [selectedRecordId, setSelectedRecordId] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [focusFilter, setFocusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -30,20 +44,21 @@ export default function App() {
       setError('');
 
       try {
-        const response = await getRecordExplorerData();
+        const response = await getInvestigationSubmissions();
+        const investigationModel = buildInvestigationModel(response.sources);
 
         if (!isMounted) {
           return;
         }
 
-        setData(response);
-        setSelectedRecordId(response.records[0]?.id ?? '');
+        setData(investigationModel);
+        setSelectedRecordId(investigationModel.records[0]?.id ?? '');
       } catch (loadError) {
         if (!isMounted) {
           return;
         }
 
-        setError(loadError.message || 'Something went wrong while loading records.');
+        setError(loadError.message || 'Something went wrong while loading the investigation sources.');
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -59,8 +74,12 @@ export default function App() {
   }, []);
 
   const filteredRecords = useMemo(() => {
-    return filterRecords(data.records, searchTerm, statusFilter);
-  }, [data.records, searchTerm, statusFilter]);
+    return filterInvestigationRecords(data.records, {
+      query,
+      source: sourceFilter,
+      focus: focusFilter,
+    });
+  }, [data.records, query, sourceFilter, focusFilter]);
 
   useEffect(() => {
     if (filteredRecords.length === 0) {
@@ -79,52 +98,96 @@ export default function App() {
     return filteredRecords.find((record) => record.id === selectedRecordId) ?? null;
   }, [filteredRecords, selectedRecordId]);
 
-  const relatedData = useMemo(() => {
-    return getRelatedItems(selectedRecord, data.people, data.events);
-  }, [selectedRecord, data.people, data.events]);
+  const linkedRecords = useMemo(() => {
+    return getLinkedRecords(selectedRecord, data.records);
+  }, [selectedRecord, data.records]);
+
+  const sourceOptions = useMemo(() => {
+    const configuredOptions = [
+      { value: 'all', label: 'All sources' },
+      { value: 'checkins', label: 'Checkins' },
+      { value: 'messages', label: 'Messages' },
+      { value: 'sightings', label: 'Sightings' },
+      { value: 'notes', label: 'Personal Notes' },
+      { value: 'tips', label: 'Anonymous Tips' },
+    ];
+
+    return configuredOptions.filter((option) => {
+      return option.value === 'all' || data.records.some((record) => record.source === option.value);
+    });
+  }, [data.records]);
+
+  const focusOptions = useMemo(() => {
+    const values = [
+      ...data.people.slice(0, 12).map((item) => item.value),
+      ...data.places.slice(0, 12).map((item) => item.value),
+    ];
+
+    return [
+      { value: 'all', label: 'All people and places' },
+      ...[...new Set(values)].map((value) => ({
+        value,
+        label: value,
+      })),
+    ];
+  }, [data.people, data.places]);
 
   const hasRecords = filteredRecords.length > 0;
-  const resultLabel = `${filteredRecords.length} record${filteredRecords.length === 1 ? '' : 's'}`;
+  const resultLabel = `${filteredRecords.length} lead${filteredRecords.length === 1 ? '' : 's'}`;
 
   return (
     <div className="app-shell">
       <header className="page-header">
         <div className="page-header-main">
           <div className="header-tag-row">
-            <p className="eyebrow">Frontend Practice Project</p>
-            <span className="product-pill">Hackathon Demo</span>
+            <p className="eyebrow">Jotform Frontend Hackathon</p>
+            <span className="product-pill">Missing Podo</span>
           </div>
-          <h1>Record Explorer</h1>
+          <h1>Missing Podo: The Ankara Case</h1>
           <p className="header-subcopy">
-            A compact internal-style workspace for browsing support records and their linked context.
+            An investigation dashboard that pulls live Jotform submissions, normalizes mixed records,
+            and helps trace the last believable sightings chain.
           </p>
         </div>
         <p className="header-copy">
-          Browse support records, inspect details, and explore linked people and events.
+          Explore checkins, messages, sightings, notes, and anonymous tips in one linked workspace.
         </p>
       </header>
+
+      {!loading && !error && data.records.length > 0 ? <SummaryBar summary={data.summary} /> : null}
 
       <main className="app-layout">
         <section className="panel sidebar-panel">
           <div className="sidebar-controls">
-            <SearchBar value={searchTerm} onChange={setSearchTerm} />
-            <FilterBar value={statusFilter} onChange={setStatusFilter} />
+            <SearchBar value={query} onChange={setQuery} />
+            <FilterBar
+              label="Source"
+              value={sourceFilter}
+              onChange={setSourceFilter}
+              options={sourceOptions}
+            />
+            <FilterBar
+              label="Person or place"
+              value={focusFilter}
+              onChange={setFocusFilter}
+              options={focusOptions}
+            />
           </div>
           {!loading && !error ? (
             <div className="results-summary">
-              <span className="results-summary-label">Results</span>
+              <span className="results-summary-label">Visible leads</span>
               <strong>{resultLabel}</strong>
             </div>
           ) : null}
 
           {loading ? (
             <StateView
-              title="Loading records"
-              message="Fetching local mock data and preparing the explorer."
+              title="Loading investigation feeds"
+              message="Fetching Jotform submissions and preparing the dashboard."
             />
           ) : error ? (
             <StateView
-              title="Could not load records"
+              title="Could not load case data"
               message={error}
               tone="error"
             />
@@ -141,24 +204,30 @@ export default function App() {
           {loading ? (
             <StateView
               title="Preparing details"
-              message="Record details will appear once the data is ready."
+              message="Selected lead details will appear once the case data is ready."
             />
           ) : error ? (
             <StateView
               title="Unable to show details"
-              message="The detail panel is unavailable because the record request failed."
+              message="The detail panel is unavailable because the investigation sources failed to load."
               tone="error"
+              action={
+                <p className="muted-copy">
+                  Make sure `.env.local` contains a valid `VITE_JOTFORM_API_KEY` and restart the dev
+                  server.
+                </p>
+              }
             />
           ) : hasRecords && selectedRecord ? (
             <DetailPanel
               record={selectedRecord}
-              people={relatedData.people}
-              events={relatedData.events}
+              linkedRecords={linkedRecords}
+              latestSighting={data.summary.latestSighting}
             />
           ) : (
             <StateView
-              title="No records found"
-              message="Try a different search term or change the status filter."
+              title="No leads found"
+              message="Try a different search term or widen the source and person/place filters."
               tone="empty"
             />
           )}

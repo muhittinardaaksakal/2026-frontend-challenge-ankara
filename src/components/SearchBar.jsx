@@ -7,7 +7,7 @@ export default function SearchBar({ value, onChange }) {
       <input
         className="control-input"
         type="search"
-        placeholder="Search by id, title, or description"
+        placeholder="Search people, places, notes, messages, or tips"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

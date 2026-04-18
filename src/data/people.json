@@ -1,6 +1,0 @@
-[
-  { "id": "p1", "name": "Alice Johnson", "role": "Customer" },
-  { "id": "p2", "name": "Eren Kaya", "role": "Support Specialist" },
-  { "id": "p3", "name": "Mert Demir", "role": "Frontend Engineer" },
-  { "id": "p4", "name": "Zeynep Aksoy", "role": "Product Manager" }
-]

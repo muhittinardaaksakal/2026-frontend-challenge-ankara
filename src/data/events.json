@@ -1,7 +1,0 @@
-[
-  { "id": "e1", "type": "ticket-created", "date": "2026-04-10" },
-  { "id": "e2", "type": "payment-retried", "date": "2026-04-10" },
-  { "id": "e3", "type": "incident-opened", "date": "2026-04-11" },
-  { "id": "e4", "type": "bug-reported", "date": "2026-04-12" },
-  { "id": "e5", "type": "fix-deployed", "date": "2026-04-13" }
-]
