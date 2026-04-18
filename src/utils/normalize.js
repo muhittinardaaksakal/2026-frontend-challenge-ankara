@@ -299,6 +299,99 @@ function chooseBetterDisplayName(currentValue, nextValue) {
   return nextValue.localeCompare(currentValue, 'tr', { sensitivity: 'base' }) < 0 ? nextValue : currentValue;
 }
 
+function buildCanonicalPersonDisplayMap(records) {
+  const displayByKey = new Map();
+
+  records.forEach((record) => {
+    const entries = [];
+
+    if (record.personKey && record.person) {
+      entries.push({
+        key: record.personKey,
+        value: record.person,
+      });
+    }
+
+    record.relatedPersonKeys.forEach((key, index) => {
+      const value = record.relatedPeople[index];
+
+      if (!key || !value) {
+        return;
+      }
+
+      entries.push({ key, value });
+    });
+
+    entries.forEach((entry) => {
+      const currentValue = displayByKey.get(entry.key);
+      displayByKey.set(entry.key, chooseBetterDisplayName(currentValue, entry.value));
+    });
+  });
+
+  return displayByKey;
+}
+
+function dedupeCanonicalPeople(relatedPersonKeys, relatedPeople, displayByKey) {
+  const seenKeys = new Set();
+  const people = [];
+
+  relatedPersonKeys.forEach((key, index) => {
+    if (!key || seenKeys.has(key)) {
+      return;
+    }
+
+    const fallbackValue = relatedPeople[index];
+    const displayValue = displayByKey.get(key) || fallbackValue;
+
+    if (!displayValue) {
+      return;
+    }
+
+    seenKeys.add(key);
+    people.push({
+      key,
+      value: displayValue,
+    });
+  });
+
+  return people;
+}
+
+function applyCanonicalPersonAliases(records) {
+  const displayByKey = buildCanonicalPersonDisplayMap(records);
+
+  return records.map((record) => {
+    const canonicalPerson = record.personKey ? displayByKey.get(record.personKey) || record.person : record.person;
+    const canonicalRelatedPeople = dedupeCanonicalPeople(
+      record.relatedPersonKeys,
+      record.relatedPeople,
+      displayByKey,
+    );
+    const summary = buildSummary(record.sourceLabel, record.content, canonicalPerson, record.place);
+    const title = createLeadTitle(record.sourceLabel, canonicalPerson, record.place);
+    const searchText = [
+      record.sourceLabel,
+      canonicalPerson,
+      record.place,
+      summary,
+      record.personKey,
+      record.placeKey,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    return {
+      ...record,
+      person: canonicalPerson,
+      relatedPeople: canonicalRelatedPeople.map((item) => item.value),
+      relatedPersonKeys: canonicalRelatedPeople.map((item) => item.key),
+      summary,
+      title,
+      searchText,
+    };
+  });
+}
+
 function chooseBetterPlaceDisplay(currentValue, nextValue, key) {
   const knownValue = KNOWN_PLACE_DISPLAY[key];
 
@@ -627,8 +720,9 @@ export function normalizeInvestigationSources(sourceResponses) {
   const records = sourceResponses.flatMap((source) => {
     return source.submissions.map((submission) => normalizeSubmission(source, submission));
   });
+  const canonicalizedRecords = applyCanonicalPersonAliases(records);
 
-  return records.sort((left, right) => {
+  return canonicalizedRecords.sort((left, right) => {
     return right.sortAt - left.sortAt;
   });
 }
