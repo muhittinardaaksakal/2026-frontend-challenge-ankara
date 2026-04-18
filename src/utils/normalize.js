@@ -24,7 +24,6 @@ const PERSON_FIELD_PRIORITY = [
   'recipient name',
   'suspect name',
   'seen with',
-  'mentioned people',
   'author name',
 ];
 
@@ -99,6 +98,7 @@ const NAME_STOPWORDS = new Set([
   'oyle',
   'boyle',
   'buradaki',
+  'teknik',
   'messages',
   'checkins',
   'sightings',
@@ -360,6 +360,16 @@ function normalizePersonCandidate(value) {
   return /[A-Za-zÇĞİÖŞÜçğıöşü]/u.test(stripped) ? stripped : '';
 }
 
+function normalizeSinglePersonValue(value) {
+  const rawValue = String(value || '').trim();
+
+  if (!rawValue || /,|\/|&|\band\b|\bve\b|\bile\b/i.test(rawValue)) {
+    return '';
+  }
+
+  return normalizePersonCandidate(rawValue);
+}
+
 function isCoordinateLike(value) {
   return /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(String(value || '').trim());
 }
@@ -550,10 +560,10 @@ export function normalizeSubmission(source, submission) {
     ...placeEntities.map((item) => item.key),
   ].filter(Boolean));
   const primaryPersonDisplay =
-    normalizePersonCandidate(findPriorityMatch(parsedAnswers.byLabel, PERSON_FIELD_PRIORITY)) ||
-    normalizePersonCandidate(findPriorityMatch(parsedAnswers.byName, PERSON_FIELD_PRIORITY)) ||
-    normalizePersonCandidate(findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS)) ||
-    normalizePersonCandidate(findFirstMatch(parsedAnswers.byName, PERSON_HINTS));
+    normalizeSinglePersonValue(findPriorityMatch(parsedAnswers.byLabel, PERSON_FIELD_PRIORITY)) ||
+    normalizeSinglePersonValue(findPriorityMatch(parsedAnswers.byName, PERSON_FIELD_PRIORITY)) ||
+    normalizeSinglePersonValue(findFirstMatch(parsedAnswers.byLabel, PERSON_HINTS)) ||
+    normalizeSinglePersonValue(findFirstMatch(parsedAnswers.byName, PERSON_HINTS));
   const personEntities = buildPersonEntities(fields, content, blockedPlaceKeys);
   const primaryPersonKey = createCanonicalPersonKey(primaryPersonDisplay);
   const primaryPlaceKey = createCanonicalPlaceKey(primaryPlaceDisplay);
